@@ -42,10 +42,10 @@ export function requiredStreakOf(tier: ComboTier): number {
   return COMBO_TIERS[tier].requiredStreak
 }
 
-/** 진행도 → 콤보 단계 */
-export function tierFromProgress(progress: number): ComboTier {
+/** 연속 정답 수 → 콤보 단계 */
+export function tierFromStreak(streak: number): ComboTier {
   for (let tier = MAX_COMBO_TIER; tier > 0; tier--) {
-    if (progress >= COMBO_TIERS[tier].requiredStreak) return tier as ComboTier
+    if (streak >= COMBO_TIERS[tier].requiredStreak) return tier as ComboTier
   }
   return 0
 }
@@ -53,20 +53,13 @@ export function tierFromProgress(progress: number): ComboTier {
 export interface ComboState {
   tier: ComboTier
   /**
-   * 실제 연속 정답 수. 표시·집계 전용이며 단계 판정에는 쓰지 않는다.
-   * 즉시 복귀로 부풀려지지 않으므로 결과 화면의 "최고 콤보"가 정직하다.
+   * 연속 정답 수. 단계 판정과 결과 화면 표시에 모두 쓴다.
+   *
+   * 예전에는 판정용 진행도와 표시용 연속 수를 따로 뒀는데, 그건 즉시 복귀가
+   * 진행도를 끌어올렸기 때문이다. 완전 초기화에서는 둘이 항상 같으므로
+   * 하나로 합쳤다.
    */
   streak: number
-  /**
-   * 단계 판정용 진행도. 즉시 복귀 시 해당 단계의 요건까지 끌어올려지므로
-   * 실제 연속 정답 수보다 클 수 있다.
-   */
-  progress: number
-  /**
-   * 즉시 복귀형(§5.3): 하락 직전 단계를 기억해 두었다가
-   * 정답 1개로 곧바로 되돌린다. 복귀할 곳이 없으면 null.
-   */
-  restoreTier: ComboTier | null
 }
 
 export interface ScoreState {
@@ -83,7 +76,7 @@ export interface ScoreState {
 export function createScoreState(): ScoreState {
   return {
     score: 0,
-    combo: { tier: 0, streak: 0, progress: 0, restoreTier: null },
+    combo: { tier: 0, streak: 0 },
     correctCount: 0,
     wrongCount: 0,
     timeoutCount: 0,
@@ -95,31 +88,22 @@ export function createScoreState(): ScoreState {
 /** 정답 시 콤보 진행 */
 function advanceCombo(combo: ComboState): ComboState {
   const streak = combo.streak + 1
-  const progress = combo.progress + 1
-
-  if (combo.restoreTier !== null) {
-    // 즉시 복귀: 하락 직전 단계로 되돌리고, 진행도도 그 단계의 요건까지 끌어올린다.
-    // (끌어올리지 않으면 복귀 직후 다음 정답에서 단계가 다시 떨어져 보인다)
-    const tier = combo.restoreTier
-    return {
-      tier,
-      streak,
-      progress: Math.max(progress, requiredStreakOf(tier)),
-      restoreTier: null,
-    }
-  }
-
-  return { tier: tierFromProgress(progress), streak, progress, restoreTier: null }
+  return { tier: tierFromStreak(streak), streak }
 }
 
-/** 오답·시간초과 시 콤보 하락 — 완전 초기화가 아니라 "한 단계만" (§5.3) */
-function dropCombo(combo: ComboState): ComboState {
-  return {
-    tier: Math.max(0, combo.tier - 1) as ComboTier,
-    streak: 0,
-    progress: 0,
-    restoreTier: combo.tier,
-  }
+/**
+ * 오답·시간초과 시 콤보 **완전 초기화**.
+ *
+ * 한 번이라도 놓치면 처음부터 다시 쌓는다. 다음 정답은 배수 없이
+ * 기본점 100점만 들어간다.
+ *
+ * ⚠ 이 규칙은 §5.3의 "한 단계만 하락 + 즉시 복귀"를 대체한 것이다.
+ *   문서가 완전 초기화를 피했던 이유는 초반 실수 하나로 판 전체가
+ *   무의미해지는 느낌이 중도 이탈로 이어진다는 것이었다(§1.3, 부록 A).
+ *   콤보의 긴장감을 우선하기로 하여 뒤집었다.
+ */
+function resetCombo(): ComboState {
+  return { tier: 0, streak: 0 }
 }
 
 export interface AnswerResult {
@@ -139,10 +123,11 @@ export interface AnswerResult {
  *
  * 확정된 두 규칙:
  *  1) §5.3.1 — 콤보 배수는 "이번 정답을 반영한 뒤"의 단계로 적용한다.
- *     3연속을 만든 그 정답부터 ×1.2를 받고, 즉시 복귀한 정답도 그 자리에서
- *     복귀 단계의 배수로 계산한다.
+ *     3연속을 만든 그 정답부터 ×1.2를 받는다.
  *  2) §5.1 — 하한 0은 매 문제 정산 시점에 누적 점수에 적용한다.
  *     화면 점수가 어느 순간에도 음수로 내려가지 않는다.
+ *
+ * 놓치면 콤보는 0으로 돌아간다. 다음 정답은 기본점 100점만 들어간다.
  */
 export function applyAnswer(
   state: ScoreState,
@@ -150,7 +135,7 @@ export function applyAnswer(
 ): AnswerResult {
   const tierBefore = state.combo.tier
   const isCorrect = outcome === 'CORRECT'
-  const combo = isCorrect ? advanceCombo(state.combo) : dropCombo(state.combo)
+  const combo = isCorrect ? advanceCombo(state.combo) : resetCombo()
 
   const multiplier = isCorrect ? multiplierOf(combo.tier) : 1
   let delta: number
