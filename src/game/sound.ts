@@ -38,12 +38,14 @@ interface SoundSpec {
 }
 
 const SPECS: Record<SoundName, SoundSpec> = {
-  question: { src: '/sounds/whistle-start.wav', volume: 0.45 },
+  // 휘슬은 2.4kHz대라 귀가 가장 민감한 구간에 걸린다.
+  // 같은 볼륨이어도 다른 소리보다 크게 들리고, 문제마다 울려서 금방 피로해진다.
+  question: { src: '/sounds/whistle-start.wav', volume: 0.18 },
   kick: { src: '/sounds/kick.wav', volume: 0.7 },
   goal: { src: '/sounds/goal.wav', volume: 0.9 },
   catch: { src: '/sounds/catch.wav', volume: 0.8 },
   wrong: { src: '/sounds/wrong.mp3', clipMs: 800, volume: 0.6 },
-  timeout: { src: '/sounds/whistle-end.wav', volume: 0.5 },
+  timeout: { src: '/sounds/whistle-end.wav', volume: 0.32 },
   comboUp: { src: '/sounds/combo-up.mp3', clipMs: 400, volume: 0.6 },
   comboDown: { src: '/sounds/combo-down.wav', volume: 0.5 },
   tick: { src: '/sounds/tick.wav', volume: 0.35 },

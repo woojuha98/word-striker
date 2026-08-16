@@ -2,17 +2,17 @@ import { motion, useAnimationControls } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { AutoFitText } from '../components/AutoFitText'
 import { Ball } from '../components/Ball'
-import { FloatingScore } from '../components/FloatingScore'
 import { Goal } from '../components/Goal'
 import { Hud } from '../components/Hud'
 import { Kicker } from '../components/Kicker'
 import { Pitch } from '../components/Pitch'
 import { PowerGauge } from '../components/PowerGauge'
+import { ShotFeedback } from '../components/ShotFeedback'
 import { TimerBar } from '../components/TimerBar'
 import { TutorialOverlay } from '../components/TutorialOverlay'
 import { PROMPT_SIZES, SENTENCE_SIZES } from '../components/textSizes'
 import { AUTO_FIRE_MS } from '../game/gauge'
-import type { ComboTier } from '../game/score'
+import { multiplierOf, type ComboTier } from '../game/score'
 import {
   reachedNet,
   reboundsOff,
@@ -245,12 +245,18 @@ export function GameScreen() {
             goalRef={goalRef}
           />
 
-          {/* 획득 점수 플로팅 (§14.7) */}
+          {/* 판정 문구 + 획득 점수 (§14.7) */}
           {resolved && last && (
-            <FloatingScore
+            <ShotFeedback
               key={index}
+              result={shotResult}
               delta={last.delta}
               optionIndex={last.selectedIndex}
+              comboMultiplier={
+                last.tierAfter > last.tierBefore
+                  ? multiplierOf(last.tierAfter)
+                  : null
+              }
             />
           )}
         </div>
