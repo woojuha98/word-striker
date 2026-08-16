@@ -9,7 +9,7 @@ import type { WordLevel } from '../types/word'
 import { DEFAULT_LEVEL, isWordLevel } from './level'
 
 /** 종목 식별자 (§9) */
-export type SportId = 'SOCCER_PK'
+export type SportId = 'SOCCER_PK' | 'BASEBALL'
 
 /**
  * 등급은 별개의 대회이므로 기록도 등급별로 나눈다 (§8.3).

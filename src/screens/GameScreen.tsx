@@ -202,8 +202,7 @@ export function GameScreen() {
         <Hud
           score={score.score}
           tier={score.combo.tier}
-          current={index + 1}
-          total={total}
+          progress={`${index + 1} / ${total}`}
         />
       </header>
 

@@ -11,8 +11,11 @@ import { MuteButton } from './MuteButton'
 interface Props {
   score: number
   tier: ComboTier
-  current: number
-  total: number
+  /**
+   * 진행 표시. 축구는 "3 / 10"이지만 야구는 3아웃까지 문항 수가 정해지지
+   * 않는다(§15.1). 종목이 문자열을 직접 준다 — 없으면 표시하지 않는다.
+   */
+  progress?: string
 }
 
 /**
@@ -21,7 +24,7 @@ interface Props {
  * 점수에 `tabular-nums`는 필수다. 없으면 점수가 오를 때 숫자 폭이 변해
  * HUD가 흔들린다 (§12.3).
  */
-export function Hud({ score, tier, current, total }: Props) {
+export function Hud({ score, tier, progress }: Props) {
   return (
     <div className="flex h-full items-center justify-between">
       <div className="flex items-baseline gap-2">
@@ -30,9 +33,9 @@ export function Hud({ score, tier, current, total }: Props) {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-xs tabular-nums text-frame/50">
-          {current} / {total}
-        </span>
+        {progress && (
+          <span className="text-xs tabular-nums text-frame/50">{progress}</span>
+        )}
         <span
           className={`text-lg font-bold tabular-nums ${
             tier > 0 ? 'text-combo' : 'text-frame/40'

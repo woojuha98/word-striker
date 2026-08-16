@@ -101,6 +101,9 @@ interface GameStore {
    */
   tutorialRound: boolean
 
+  /** 시작 화면에서 고른 종목 (§9). 실제 진행은 종목별 스토어가 맡는다 */
+  sport: SportId
+  setSport: (sport: SportId) => void
   setLevel: (level: WordLevel) => void
   startGame: () => void
   /** 골대 칸을 누르기 시작 — 게이지 왕복 시작, 문제 타이머 정지 */
@@ -129,6 +132,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isNewBest: false,
   tutorialActive: false,
   tutorialRound: false,
+
+  sport: SPORT,
+
+  setSport: (sport) => {
+    if (get().phase !== 'TITLE') return
+    set({ sport })
+  },
 
   setLevel: (level) => {
     if (get().phase !== 'TITLE') return
