@@ -16,26 +16,30 @@ git remote add origin https://github.com/<계정>/<저장소>.git
 git push -u origin main
 ```
 
-## 2. 커밋 작성자 확인 ★먼저 볼 것
+## 2. 커밋 작성자 ★푸시 전에 확정할 것
 
-지금 커밋은 이 이름으로 남아 있다:
+커밋 메타데이터의 이메일은 **공개 저장소에서 누구나 볼 수 있다.**
+개인 메일을 그대로 쓰면 스팸 수집 대상이 되므로 GitHub가 주는
+noreply 주소를 쓴다. Settings → Emails 에서 확인할 수 있다.
 
 ```
-dnwngk98 <dnwngk98@gmail.com>
+<숫자>+<계정명>@users.noreply.github.com
 ```
 
-포트폴리오로 쓸 이름이 따로 있으면 **푸시 전에** 바꾼다.
-푸시한 뒤에 바꾸려면 강제 푸시가 필요해서 번거롭다.
+잔디(contribution graph)는 **이름이 아니라 이메일로** 계정과 연결된다.
+noreply 주소를 써도 정상적으로 찍힌다.
+
+바꿔야 할 때 (푸시 전이면 이것으로 충분하다):
 
 ```bash
 git config user.name "쓸 이름"
 git config user.email "쓸 메일"
 
-# 이미 만든 커밋의 작성자까지 전부 바꾼다
+# 이미 만든 커밋의 작성자까지 전부 다시 쓴다
 git rebase -r --root --exec "git commit --amend --no-edit --reset-author"
 ```
 
-GitHub 잔디에 반영되려면 **메일 주소가 GitHub 계정에 등록된 것과 같아야 한다.**
+푸시한 뒤에 바꾸려면 강제 푸시가 필요하다. 먼저 정하는 편이 훨씬 싸다.
 
 ## 3. Vercel에 연결
 
