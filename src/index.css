@@ -1,0 +1,61 @@
+@import 'tailwindcss';
+
+/* 톤앤매너 §12.2 — 야간 경기장 팔레트.
+   색상은 반드시 이 토큰으로만 참조한다 (bg-night, text-combo, border-frame ...). */
+@theme {
+  --color-night: #0b1220; /* 배경: 밤하늘·관중석 */
+  --color-turf-top: #14532d; /* 잔디 위쪽 (어두움) */
+  --color-turf-bottom: #166534; /* 잔디 아래쪽 (밝음) */
+  --color-frame: #f8fafc; /* 골대 프레임 / 기본 텍스트 */
+  --color-correct: #22c55e;
+  --color-wrong: #ef4444;
+  --color-combo: #facc15; /* 시그니처: 야간 조명색 */
+
+  --font-sans: 'Pretendard Variable', Pretendard, system-ui, sans-serif;
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  /* dvh — 모바일 주소창이 접히고 펴져도 레이아웃 비율(§4.1)이 유지된다 */
+  #root {
+    height: 100dvh;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-night);
+    color: var(--color-frame);
+    font-family: var(--font-sans);
+    /* 탭 조작 게임: 하이라이트·더블탭 확대·바운스 스크롤 제거 */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    overscroll-behavior: none;
+    -webkit-font-smoothing: antialiased;
+    /* 빠르게 연타할 때 선택 영역이 잡히거나 길게 눌러 메뉴가 뜨지 않게 */
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+/* 잔디도 SVG로 옮겼다 (§12.5) — components/Pitch.tsx */
+
+/* 노치·홈 인디케이터 회피.
+   잔디는 화면 끝까지 흘려보내고, 조작 요소가 있는 곳만 안전영역을 지킨다. */
+@utility safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+@utility safe-y {
+  padding-block: env(safe-area-inset-top, 0px) env(safe-area-inset-bottom, 0px);
+}
+
+/* 골대 그물은 SVG로 옮겼다 (§12.5) — components/GoalFrame.tsx */

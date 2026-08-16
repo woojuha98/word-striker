@@ -1,0 +1,40 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 내려받은 음원 원본 (ASSETS.md 참고)
+#
+# Pixabay Content License는 게임에 삽입하는 것은 허용하지만
+# 원본 파일을 그대로 다시 받을 수 있게 하는 재배포(standalone)는 금지한다.
+# 공개 저장소에 원본 mp3를 올리면 그 자체가 재배포에 해당한다.
+# 게임이 실제로 쓰는 가공본만 public/sounds/에 커밋한다.
+BGM/
+
+# 데이터 작업용 임시본 — 실제 데이터는 src/data/words.json
+# 앞의 /가 없으면 하위 경로의 같은 이름까지 걸려 src/data/words.json이 빠진다
+/words.json
+/words-150.json
+
+# 라이선스 확인용 화면 캡처
+/사운드.png
