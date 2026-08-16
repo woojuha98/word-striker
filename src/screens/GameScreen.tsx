@@ -13,6 +13,12 @@ import { TutorialOverlay } from '../components/TutorialOverlay'
 import { PROMPT_SIZES, SENTENCE_SIZES } from '../components/textSizes'
 import { AUTO_FIRE_MS } from '../game/gauge'
 import type { ComboTier } from '../game/score'
+import {
+  reachedNet,
+  reboundsOff,
+  resolveShot,
+  TARGET_BELOW_TEXT,
+} from '../game/shot'
 import { playComboUp, playCorrectSound, playSound } from '../game/sound'
 import {
   BALL_DELAY_MS,
@@ -63,20 +69,20 @@ export function GameScreen() {
   const charging = phase === 'CHARGING'
   const resolved = phase === 'RESOLVED'
 
-  // 골이 들어갔는가 = 게이지 초록 (§7.2 결과 매트릭스).
-  // 정답 여부와 무관하다 — 오답이어도 초록이면 골은 들어간다.
-  const scored = resolved && last?.zone === 'GREEN'
-  const netImpactIndex = scored ? (last?.selectedIndex ?? null) : null
+  // §7.2 결과 매트릭스. 골키퍼·네트·흔들림·리바운드가 전부 여기서 갈린다.
+  // 오답은 게이지와 무관하게 잡히므로, 오답에서는 골이 들어가지 않는다.
+  const shotResult = resolved && last ? resolveShot(last.outcome, last.zone) : 'NONE'
+  const isGoal = reachedNet(shotResult)
 
   // 골 성공 시 화면 흔들림 3px, 0.15초 (§14.7)
   const shake = useAnimationControls()
   useEffect(() => {
-    if (!scored) return
+    if (!isGoal) return
     shake.start({
       x: [0, -SHAKE_PX, SHAKE_PX, -SHAKE_PX, 0],
       transition: { duration: SHAKE_MS / 1000 },
     })
-  }, [scored, index, shake])
+  }, [isGoal, index, shake])
 
   // 제한 시간이 지나면 시간초과 (§7.3).
   // 튜토리얼 첫 문제에는 제한이 없고(§13.3), 누르는 동안에는 멈춘다(§7.2).
@@ -132,10 +138,10 @@ export function GameScreen() {
     playSound('kick')
     const id = setTimeout(() => {
       if (last.outcome === 'CORRECT') {
-        // 골이면 정답음, 선방이면 글러브 캐치음 (§14.3.1)
-        playCorrectSound(last.tierAfter, last.zone === 'GREEN')
+        // 골이면 정답음(네트+환호), 선방이면 글러브 타격음만 (§14.3.1)
+        playCorrectSound(last.tierAfter, shotResult === 'GOAL')
       } else {
-        // 오답은 게이지와 무관하게 부저 (§14.3.1)
+        // 오답은 게이지와 무관하게 부저 하나 (§14.3.1)
         playSound('wrong')
       }
       if (last.tierAfter > last.tierBefore) playComboUp(last.tierAfter)
@@ -143,7 +149,7 @@ export function GameScreen() {
     }, BALL_DELAY_MS + BALL_FLIGHT_MS)
 
     return () => clearTimeout(id)
-  }, [resolved, last])
+  }, [resolved, last, shotResult])
 
   // 남은 시간 1초 이하 — 심박 틱
   useEffect(() => {
@@ -166,7 +172,8 @@ export function GameScreen() {
   if (!question) return null
 
   const comboRose = resolved && last !== null && last.tierAfter > last.tierBefore
-  const saved = resolved && last?.zone === 'RED'
+  // 잡힌 공은 손에 멈춘다. 튕겨 나가는 건 쳐냈을 때뿐이다 (§7.2)
+  const rebounds = reboundsOff(shotResult)
 
   return (
     <motion.div
@@ -232,8 +239,7 @@ export function GameScreen() {
             chargingIndex={chargingIndex}
             revealed={resolved}
             interactive={phase === 'ASKING'}
-            keeperDive={keeperDive(last)}
-            netImpactIndex={netImpactIndex}
+            shotResult={shotResult}
             onPressStart={pressCell}
             onRelease={release}
             goalRef={goalRef}
@@ -264,9 +270,10 @@ export function GameScreen() {
             ref={ballRef}
             data-ball
             className="relative z-10 leading-none"
-            animate={ballAnimation(flight, saved)}
+            animate={ballAnimation(flight, rebounds)}
             transition={{
-              duration: (saved ? BALL_FLIGHT_MS + REBOUND_MS : BALL_FLIGHT_MS) / 1000,
+              duration:
+                (rebounds ? BALL_FLIGHT_MS + REBOUND_MS : BALL_FLIGHT_MS) / 1000,
               delay: flight ? BALL_DELAY_MS / 1000 : 0,
               ease: 'easeOut',
             }}
@@ -284,24 +291,13 @@ export function GameScreen() {
   )
 }
 
-/**
- * 골키퍼 다이빙 방향 (§13.2)
- * 초록 → 반대 방향으로 다이빙(실점), 빨강 → 슛 방향으로 다이빙(선방).
- */
-function keeperDive(
-  last: { selectedIndex: number | null; zone: 'GREEN' | 'RED' | null } | null,
-): -1 | 1 | null {
-  if (!last || last.selectedIndex === null || last.zone === null) return null
-  const shotDirection = last.selectedIndex % 2 === 0 ? -1 : 1
-  return last.zone === 'GREEN'
-    ? ((-shotDirection) as -1 | 1)
-    : (shotDirection as -1 | 1)
-}
-
-/** 선방이면 목표 지점에서 되튀어 나온다 (§13.2) */
-function ballAnimation(flight: { x: number; y: number } | null, saved: boolean) {
+/** 쳐낸 공만 되튀어 나온다. 잡힌 공은 골키퍼 손에 멈춘다 (§7.2) */
+function ballAnimation(
+  flight: { x: number; y: number } | null,
+  rebounds: boolean,
+) {
   if (!flight) return { x: 0, y: 0, scale: 1 }
-  if (!saved) return { x: flight.x, y: flight.y, scale: 0.5 }
+  if (!rebounds) return { x: flight.x, y: flight.y, scale: 0.5 }
   return {
     x: [flight.x, flight.x * 0.55],
     y: [flight.y, flight.y * 0.55],
@@ -322,10 +318,8 @@ function flightTo(
   const col = optionIndex % 2
   const row = Math.floor(optionIndex / 2)
 
-  // 칸 중앙이 아니라 살짝 아래를 겨냥한다.
+  // 칸 중앙이 아니라 살짝 아래를 겨냥한다 (골키퍼도 같은 지점을 쓴다).
   // 정중앙에 꽂히면 공이 선택지 글자를 덮어 판정 결과를 읽을 수 없다.
-  const BELOW_TEXT = 0.08
-
   return {
     x:
       goalRect.left +
@@ -333,7 +327,7 @@ function flightTo(
       (ballRect.left + ballRect.width / 2),
     y:
       goalRect.top +
-      goalRect.height * ((row === 0 ? 0.25 : 0.75) + BELOW_TEXT) -
+      goalRect.height * ((row === 0 ? 0.25 : 0.75) + TARGET_BELOW_TEXT) -
       (ballRect.top + ballRect.height / 2),
   }
 }
