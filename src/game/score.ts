@@ -42,24 +42,44 @@ export function requiredStreakOf(tier: ComboTier): number {
   return COMBO_TIERS[tier].requiredStreak
 }
 
-/** 연속 정답 수 → 콤보 단계 */
-export function tierFromStreak(streak: number): ComboTier {
+/** 진행도 → 콤보 단계 */
+export function tierFromProgress(progress: number): ComboTier {
   for (let tier = MAX_COMBO_TIER; tier > 0; tier--) {
-    if (streak >= COMBO_TIERS[tier].requiredStreak) return tier as ComboTier
+    if (progress >= COMBO_TIERS[tier].requiredStreak) return tier as ComboTier
   }
   return 0
 }
 
+/**
+ * §5.3 콤보 하락 규칙. 등급이 정하지만(§8.3) 점수 계산은 등급을 모른다 —
+ * 규칙만 받아서 적용한다.
+ */
+export type ComboDropRule =
+  /** 한 단계만 내려가고, 정답 1개로 즉시 복귀 */
+  | 'STEP'
+  /** ×1.0으로 리셋. 3연속부터 다시 쌓아야 한다 */
+  | 'RESET'
+
 export interface ComboState {
   tier: ComboTier
   /**
-   * 연속 정답 수. 단계 판정과 결과 화면 표시에 모두 쓴다.
-   *
-   * 예전에는 판정용 진행도와 표시용 연속 수를 따로 뒀는데, 그건 즉시 복귀가
-   * 진행도를 끌어올렸기 때문이다. 완전 초기화에서는 둘이 항상 같으므로
-   * 하나로 합쳤다.
+   * 실제 연속 정답 수. 표시·집계 전용이며 단계 판정에는 쓰지 않는다.
+   * 즉시 복귀로 부풀려지지 않으므로 결과 화면의 "최고 콤보"가 정직하다.
    */
   streak: number
+  /**
+   * 단계 판정용 진행도. 즉시 복귀 시 해당 단계의 요건까지 끌어올려지므로
+   * 실제 연속 정답 수보다 클 수 있다 (§5.3.2).
+   *
+   * 완전 초기화 등급에서는 streak과 늘 같지만, 규칙이 등급별로 갈리므로
+   * 분리는 등급과 무관하게 유지한다.
+   */
+  progress: number
+  /**
+   * 즉시 복귀형(§5.3, 초급): 하락 직전 단계를 기억해 두었다가
+   * 정답 1개로 곧바로 되돌린다. 복귀할 곳이 없으면 null.
+   */
+  restoreTier: ComboTier | null
 }
 
 export interface ScoreState {
@@ -76,7 +96,7 @@ export interface ScoreState {
 export function createScoreState(): ScoreState {
   return {
     score: 0,
-    combo: { tier: 0, streak: 0 },
+    combo: { tier: 0, streak: 0, progress: 0, restoreTier: null },
     correctCount: 0,
     wrongCount: 0,
     timeoutCount: 0,
@@ -88,22 +108,41 @@ export function createScoreState(): ScoreState {
 /** 정답 시 콤보 진행 */
 function advanceCombo(combo: ComboState): ComboState {
   const streak = combo.streak + 1
-  return { tier: tierFromStreak(streak), streak }
+  const progress = combo.progress + 1
+
+  if (combo.restoreTier !== null) {
+    // 즉시 복귀(초급): 하락 직전 단계로 되돌리고, 진행도도 그 단계의 요건까지
+    // 끌어올린다. 끌어올리지 않으면 복귀 직후 다음 정답에서 단계가 다시
+    // 떨어져 보인다.
+    const tier = combo.restoreTier
+    return {
+      tier,
+      streak,
+      progress: Math.max(progress, requiredStreakOf(tier)),
+      restoreTier: null,
+    }
+  }
+
+  return { tier: tierFromProgress(progress), streak, progress, restoreTier: null }
 }
 
 /**
- * 오답·시간초과 시 콤보 **완전 초기화**.
+ * 오답·시간초과 시 콤보 하락 (§5.3). 규칙은 등급이 정한다.
  *
- * 한 번이라도 놓치면 처음부터 다시 쌓는다. 다음 정답은 배수 없이
- * 기본점 100점만 들어간다.
- *
- * ⚠ 이 규칙은 §5.3의 "한 단계만 하락 + 즉시 복귀"를 대체한 것이다.
- *   문서가 완전 초기화를 피했던 이유는 초반 실수 하나로 판 전체가
- *   무의미해지는 느낌이 중도 이탈로 이어진다는 것이었다(§1.3, 부록 A).
- *   콤보의 긴장감을 우선하기로 하여 뒤집었다.
+ * - `STEP` (초급): 한 단계만 내려가고 정답 1개로 복귀한다.
+ *   어휘를 모르는 입문자가 콤보를 아예 못 쌓는 상황을 막는다.
+ * - `RESET` (중·고급): ×1.0으로 돌아간다. 3연속을 새로 채워야 한다.
  */
-function resetCombo(): ComboState {
-  return { tier: 0, streak: 0 }
+function dropCombo(combo: ComboState, rule: ComboDropRule): ComboState {
+  if (rule === 'RESET') {
+    return { tier: 0, streak: 0, progress: 0, restoreTier: null }
+  }
+  return {
+    tier: Math.max(0, combo.tier - 1) as ComboTier,
+    streak: 0,
+    progress: 0,
+    restoreTier: combo.tier,
+  }
 }
 
 export interface AnswerResult {
@@ -123,19 +162,22 @@ export interface AnswerResult {
  *
  * 확정된 두 규칙:
  *  1) §5.3.1 — 콤보 배수는 "이번 정답을 반영한 뒤"의 단계로 적용한다.
- *     3연속을 만든 그 정답부터 ×1.2를 받는다.
+ *     3연속을 만든 그 정답부터 ×1.2를 받는다. 초급에서 즉시 복귀한 정답도
+ *     그 자리에서 복귀 단계의 배수로 계산한다. 중·고급은 복귀가 없으므로
+ *     3연속을 다시 채운 정답부터 ×1.2다.
  *  2) §5.1 — 하한 0은 매 문제 정산 시점에 누적 점수에 적용한다.
  *     화면 점수가 어느 순간에도 음수로 내려가지 않는다.
- *
- * 놓치면 콤보는 0으로 돌아간다. 다음 정답은 기본점 100점만 들어간다.
  */
 export function applyAnswer(
   state: ScoreState,
   outcome: AnswerOutcome,
+  dropRule: ComboDropRule,
 ): AnswerResult {
   const tierBefore = state.combo.tier
   const isCorrect = outcome === 'CORRECT'
-  const combo = isCorrect ? advanceCombo(state.combo) : resetCombo()
+  const combo = isCorrect
+    ? advanceCombo(state.combo)
+    : dropCombo(state.combo, dropRule)
 
   const multiplier = isCorrect ? multiplierOf(combo.tier) : 1
   let delta: number

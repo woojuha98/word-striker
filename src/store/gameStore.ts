@@ -11,6 +11,7 @@
 import { create } from 'zustand'
 import { WORDS } from '../data/words'
 import { judgeGauge, type GaugeZone } from '../game/gauge'
+import { COMBO_DROP_BY_LEVEL } from '../game/level'
 import {
   buildRound,
   QUESTIONS_PER_ROUND,
@@ -243,9 +244,10 @@ function resolve(
   selectedIndex: number | null,
   zone: GaugeZone | null,
 ) {
-  const { score, questions, index, history } = get()
+  const { score, questions, index, history, level } = get()
   const question = questions[index]
-  const result = applyAnswer(score, outcome)
+  // 콤보 하락 규칙은 등급이 정한다 (§5.3)
+  const result = applyAnswer(score, outcome, COMBO_DROP_BY_LEVEL[level])
 
   set({
     phase: 'RESOLVED',

@@ -61,6 +61,13 @@ export const TIMER_PULSE_MS = 500
  */
 export const COMBO_LIGHT_OPACITY = [0, 0.18, 0.32, 0.5] as const
 
-/** 조명 전환 — 상승은 빠르게, 하락은 천천히 (급락처럼 보이지 않게) */
+/**
+ * 조명 전환 (§5.4)
+ *
+ * - 상승: 빠르게 밝아진다
+ * - 초급 하락: 천천히 — 한 단계만 내려간 것이 급락으로 보이면 안 된다
+ * - 중·고급 초기화: 한 번에 꺼진다. 상실감이 분명해야 긴장감이 성립한다
+ */
 export const LIGHT_RISE_MS = 200
 export const LIGHT_FALL_MS = 600
+export const LIGHT_SNAP_MS = 110

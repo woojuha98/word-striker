@@ -10,6 +10,7 @@
  */
 
 import type { QuestionType, WordLevel } from '../types/word'
+import type { ComboDropRule } from './score'
 
 export const LEVELS: WordLevel[] = ['basic', 'intermediate', 'advanced']
 
@@ -33,6 +34,20 @@ export const TYPE_RATIO: Record<WordLevel, Record<QuestionType, number>> = {
   basic: { EN_KO: 0.65, KO_EN: 0.35, CLOZE: 0 },
   intermediate: { EN_KO: 0.35, KO_EN: 0.45, CLOZE: 0.2 },
   advanced: { EN_KO: 0.2, KO_EN: 0.4, CLOZE: 0.4 },
+}
+
+/**
+ * §5.3 등급별 콤보 하락 규칙.
+ *
+ * 완전 초기화를 전 등급에 적용하면 어휘를 모르는 입문자는 콤보를 아예
+ * 쌓지 못한다. 초급만 보호하고 중·고급에 긴장감을 두는 절충이다.
+ *
+ * 상한 ×2.0과 단계 임계값은 등급과 무관하게 같다.
+ */
+export const COMBO_DROP_BY_LEVEL: Record<WordLevel, ComboDropRule> = {
+  basic: 'STEP',
+  intermediate: 'RESET',
+  advanced: 'RESET',
 }
 
 /**

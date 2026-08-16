@@ -12,7 +12,8 @@ import { TimerBar } from '../components/TimerBar'
 import { TutorialOverlay } from '../components/TutorialOverlay'
 import { PROMPT_SIZES, SENTENCE_SIZES } from '../components/textSizes'
 import { AUTO_FIRE_MS } from '../game/gauge'
-import { multiplierOf, type ComboTier } from '../game/score'
+import { COMBO_DROP_BY_LEVEL } from '../game/level'
+import { multiplierOf, type ComboDropRule, type ComboTier } from '../game/score'
 import {
   reachedNet,
   reboundsOff,
@@ -27,6 +28,7 @@ import {
   COMBO_LIGHT_OPACITY,
   LIGHT_FALL_MS,
   LIGHT_RISE_MS,
+  LIGHT_SNAP_MS,
   REBOUND_MS,
   RESOLVE_MS,
   SHAKE_MS,
@@ -55,6 +57,7 @@ export function GameScreen() {
   const askStartedAt = useGameStore((s) => s.askStartedAt)
   const chargingIndex = useGameStore((s) => s.chargingIndex)
   const chargeStartedAt = useGameStore((s) => s.chargeStartedAt)
+  const level = useGameStore((s) => s.level)
   const tutorialActive = useGameStore((s) => s.tutorialActive)
   const isTutorialQuestion = useGameStore(selectIsTutorialQuestion)
   const pressCell = useGameStore((s) => s.pressCell)
@@ -68,6 +71,7 @@ export function GameScreen() {
 
   const charging = phase === 'CHARGING'
   const resolved = phase === 'RESOLVED'
+  const dropRule = COMBO_DROP_BY_LEVEL[level]
 
   // §7.2 결과 매트릭스. 골키퍼·네트·흔들림·리바운드가 전부 여기서 갈린다.
   // 오답은 게이지와 무관하게 잡히므로, 오답에서는 골이 들어가지 않는다.
@@ -180,7 +184,7 @@ export function GameScreen() {
       animate={shake}
       className="relative mx-auto flex h-full max-w-[430px] flex-col overflow-hidden"
     >
-      <ComboLight tier={score.combo.tier} />
+      <ComboLight tier={score.combo.tier} dropRule={dropRule} />
 
       {/* 콤보 상승 플래시 (§12.4) */}
       {comboRose && (
@@ -340,16 +344,27 @@ function flightTo(
 
 /**
  * 경기장 조명 = 콤보 표현 (§5.4).
- * 숫자 게이지 대신 밝기로 보여주고, 하락은 천천히 어두워지게 해서
- * "급락"처럼 보이지 않게 한다.
+ *
+ * 숫자 게이지 대신 밝기로 보여준다. 하락은 등급에 따라 다르게 읽혀야 한다:
+ * - 초급(한 단계 하락)은 천천히 어두워진다. 급락처럼 보이면 완전 초기화로
+ *   오해되어, 한 단계만 내린 취지가 사라진다.
+ * - 중·고급(완전 초기화)은 한 번에 꺼진다. 상실감이 분명해야 긴장감이 선다.
  */
-function ComboLight({ tier }: { tier: ComboTier }) {
+function ComboLight({
+  tier,
+  dropRule,
+}: {
+  tier: ComboTier
+  dropRule: ComboDropRule
+}) {
   const previous = useRef(tier)
   const rising = tier > previous.current
 
   useEffect(() => {
     previous.current = tier
   }, [tier])
+
+  const fallMs = dropRule === 'RESET' ? LIGHT_SNAP_MS : LIGHT_FALL_MS
 
   return (
     <motion.div
@@ -361,9 +376,7 @@ function ComboLight({ tier }: { tier: ComboTier }) {
       }}
       initial={false}
       animate={{ opacity: COMBO_LIGHT_OPACITY[tier] }}
-      transition={{
-        duration: (rising ? LIGHT_RISE_MS : LIGHT_FALL_MS) / 1000,
-      }}
+      transition={{ duration: (rising ? LIGHT_RISE_MS : fallMs) / 1000 }}
     />
   )
 }
