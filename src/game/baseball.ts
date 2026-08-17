@@ -73,15 +73,19 @@ export const OUTS_PER_GAME = 3
 export const BALLS_PER_AT_BAT = 4
 
 /**
- * 스트라이크 누적 범위 — 문서에 명시가 없어 아래처럼 정했다.
+ * 타석 상한 (§15.3).
  *
- * 스트라이크는 **타석을 넘어 누적되고 아웃될 때만 초기화**된다.
- * 야구의 통상 규칙(타석마다 초기화)을 쓰면, 매 타석 정답만 거르는
- * 플레이어는 타석당 스트라이크 1개씩만 받아 어휘가 떨어질 때까지
- * (등급당 50단어) 판이 끝나지 않는다. 누적으로 두면 최대 9스트라이크에
- * 끝나 축구 10문제와 비슷한 길이가 된다.
+ * **10타석 또는 3아웃 중 먼저 오는 쪽**에서 판이 끝난다.
+ *
+ * 스트라이크는 야구 규칙대로 타석마다 초기화된다. 그러면 소극적으로 다
+ * 거르는 플레이어는 타석당 스트라이크 1개씩만 받아 영원히 아웃되지 않으므로,
+ * 종료 조건이 하나 더 필요하다. 상한을 두는 쪽이 스트라이크 누적보다 낫다 —
+ * 누적은 사람들이 이미 아는 야구 상식과 어긋나서, 새 규칙 하나를 배우는 게
+ * 아니라 알던 것을 버리고 배우게 만든다.
+ *
+ * 10은 축구 10문제와 길이를 맞추고, 실제 야구의 이닝 상한과도 은유가 맞는다.
  */
-export const STRIKES_RESET_ON_OUT_ONLY = true
+export const MAX_AT_BATS = 10
 
 export interface CountState {
   strikes: number
@@ -109,6 +113,8 @@ export interface CountResult {
  *
  * `lastBall`은 그 타석의 마지막 공이었는지다. 정답을 이미 흘려보낸 뒤
  * 남은 오답을 모두 걸러도 타석은 끝나야 하므로, 공이 소진되면 타석을 닫는다.
+ *
+ * 스트라이크는 **타석이 끝나면 초기화**된다 — 야구 규칙 그대로다.
  */
 export function applyPitch(
   count: CountState,
@@ -120,15 +126,18 @@ export function applyPitch(
   const atBatOver = endsAtBat(outcome) || outed || lastBall
 
   const outs = count.outs + (outed ? 1 : 0)
+  const atBats = count.atBats + (atBatOver ? 1 : 0)
+
   return {
     count: {
-      strikes: outed ? 0 : strikes,
+      strikes: atBatOver ? 0 : strikes,
       outs,
-      atBats: count.atBats + (atBatOver ? 1 : 0),
+      atBats,
     },
     outed,
     atBatOver,
-    gameOver: outs >= OUTS_PER_GAME,
+    // 3아웃 또는 10타석 중 먼저 오는 쪽 (§15.3)
+    gameOver: outs >= OUTS_PER_GAME || atBats >= MAX_AT_BATS,
   }
 }
 

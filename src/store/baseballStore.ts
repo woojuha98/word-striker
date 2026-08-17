@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 야구 한 판 (§15)
  *
  * 축구 스토어와 나란히 두고 App이 종목으로 갈라 준다. 점수 계산은 두 종목이
@@ -13,7 +13,7 @@ import {
   BALLS_PER_AT_BAT,
   createCountState,
   judgePitch,
-  OUTS_PER_GAME,
+  MAX_AT_BATS,
   scoreOutcomeOf,
   toMedalScale,
   type CountState,
@@ -38,9 +38,6 @@ import type { WordLevel } from '../types/word'
 
 const SPORT: SportId = 'BASEBALL'
 
-/** 어휘가 떨어지기 전에 판이 끝나도록 넉넉히 잡는다 (등급당 50단어) */
-const MAX_AT_BATS = 25
-
 export type BaseballPhase = 'IDLE' | 'PLAYING' | 'RESULT'
 
 interface BaseballStore {
@@ -64,6 +61,8 @@ interface BaseballStore {
   lastOuted: boolean
   /** 직전 판정으로 타석이 끝났는지 */
   lastAtBatOver: boolean
+  /** 직전 판정으로 판이 끝났는지 (3아웃 또는 10타석) */
+  lastGameOver: boolean
 
   count: CountState
   score: ScoreState
@@ -91,6 +90,7 @@ export const useBaseballStore = create<BaseballStore>((set, get) => ({
   lastAnswer: null,
   lastOuted: false,
   lastAtBatOver: false,
+    lastGameOver: false,
   count: createCountState(),
   score: createScoreState(),
   bestScore: 0,
@@ -110,6 +110,7 @@ export const useBaseballStore = create<BaseballStore>((set, get) => ({
       lastAnswer: null,
       lastOuted: false,
       lastAtBatOver: false,
+    lastGameOver: false,
       count: createCountState(),
       score: createScoreState(),
       bestScore: loadBestScore(SPORT, level),
@@ -182,6 +183,7 @@ function resolvePitch(set: SetState, get: GetState, swung: boolean) {
     lastAnswer: answer,
     lastOuted: counted.outed,
     lastAtBatOver: counted.atBatOver,
+    lastGameOver: counted.gameOver,
     score: answer ? answer.state : score,
     count: counted.count,
   })
@@ -190,22 +192,19 @@ function resolvePitch(set: SetState, get: GetState, swung: boolean) {
 /** 결과 표시가 끝난 뒤 — 다음 공 / 다음 타석 / 판 종료 */
 function nextBall(set: SetState, get: GetState) {
   const {
-    atBats,
     atBatIndex,
     ballIndex,
     lastAtBatOver,
+    lastGameOver,
     count,
     score,
     level,
     bestScore,
   } = get()
 
-  // 3아웃이면 판 종료. 어휘가 떨어져도 끝낸다.
-  const gameOver =
-    count.outs >= OUTS_PER_GAME ||
-    (lastAtBatOver && atBatIndex + 1 >= atBats.length)
-
-  if (gameOver) {
+  // 종료 판정은 applyPitch가 이미 했다 (3아웃 또는 10타석).
+  // 여기서 다시 계산하면 규칙이 두 곳에 생겨 반드시 어긋난다.
+  if (lastGameOver) {
     const medal = toMedalScale(score.score, Math.max(1, count.atBats))
     const isNewBest = medal > bestScore
     if (isNewBest) saveBestScore(SPORT, level, medal)
@@ -225,6 +224,7 @@ function nextBall(set: SetState, get: GetState) {
     lastAnswer: null,
     lastOuted: false,
     lastAtBatOver: false,
+    lastGameOver: false,
     ...(lastAtBatOver
       ? { atBatIndex: atBatIndex + 1, ballIndex: 0 }
       : { ballIndex: ballIndex + 1 }),
@@ -238,3 +238,4 @@ export const selectAtBat = (s: BaseballStore): Question | undefined =>
 /** 1000점 환산 결과 (§15.7) */
 export const selectMedalScore = (s: BaseballStore): number =>
   toMedalScale(s.score.score, Math.max(1, s.count.atBats))
+

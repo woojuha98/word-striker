@@ -11,6 +11,11 @@
   --color-wrong: #ef4444;
   --color-combo: #facc15; /* 시그니처: 야간 조명색 */
 
+  /* 야구 내야 흙 (§15). §12.2 팔레트에 없던 색이라 새로 넣는다 —
+     의미색(정답 초록·오답 빨강·콤보 노랑)과 겹치지 않는 계열이어야 한다 */
+  --color-dirt: #8b6644;
+  --color-dirt-dark: #6f4f34;
+
   --font-sans: 'Pretendard Variable', Pretendard, system-ui, sans-serif;
 }
 

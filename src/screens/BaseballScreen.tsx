@@ -1,11 +1,13 @@
 import { motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { AutoFitText } from '../components/AutoFitText'
+import { BaseballField } from '../components/BaseballField'
+import { Batter } from '../components/Batter'
 import { Hud } from '../components/Hud'
-import { Pitch as Turf } from '../components/Pitch'
 import { PROMPT_SIZES, SENTENCE_SIZES } from '../components/textSizes'
 import {
   BALLS_PER_AT_BAT,
+  MAX_AT_BATS,
   OUTS_PER_GAME,
   STRIKES_PER_OUT,
   type PitchOutcome,
@@ -91,7 +93,7 @@ export function BaseballScreen() {
         <Hud
           score={score.score}
           tier={score.combo.tier}
-          progress={`${atBatIndex + 1}타석`}
+          progress={`${atBatIndex + 1} / ${MAX_AT_BATS}타석`}
         />
       </header>
 
@@ -121,10 +123,12 @@ export function BaseballScreen() {
         onPointerDown={swing}
         className="relative grow overflow-hidden"
       >
-        <Turf />
+        <BaseballField />
 
-        {/* 홈플레이트 */}
-        <div className="absolute bottom-[12%] left-1/2 h-3 w-16 -translate-x-1/2 rotate-45 rounded-sm bg-frame/70" />
+        {/* 타자 — 홈플레이트 왼쪽 타석에 선다 */}
+        <div className="absolute bottom-[6%] left-[26%] z-10">
+          <Batter />
+        </div>
 
         {/* 날아오는 공. 위치는 단계가 정한다 — 위치로 단계를 되짚지 않는다 */}
         {pitchPhase !== 'READY' && fieldHeight > 0 && (
