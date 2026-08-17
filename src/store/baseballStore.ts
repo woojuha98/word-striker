@@ -17,6 +17,7 @@ import {
   MAX_AT_BATS,
   scoreOutcomeOf,
   toMedalScale,
+  withAnswerAfterFirst,
   type CoachCue,
   type CountState,
   type PitchOutcome,
@@ -80,6 +81,13 @@ interface BaseballStore {
    * 실제 상황에서 멈춰 보여주는 것이 글로 설명하는 것보다 잘 남는다.
    */
   coach: CoachCue | null
+  /**
+   * 연습 타석에서 이미 보여 준 코칭.
+   * 같은 문구를 공마다 반복하면 학습이 아니라 대기 시간이 되고,
+   * 튜토리얼이 지루해지면 그대로 이탈이다.
+   */
+  coachedTake: boolean
+  coachedMistake: boolean
 
   start: (level: WordLevel) => void
   /** 판정창 안에서만 받는다 (§15.5) */
@@ -116,18 +124,26 @@ export const useBaseballStore = create<BaseballStore>((set, get) => ({
   isNewBest: false,
   tutorialRound: false,
   coach: null,
+  coachedTake: false,
+  coachedMistake: false,
 
   start: (level) => {
     const firstPlay = !loadBaseballTutorialSeen()
+    const round = buildRound(WORDS, { level, count: MAX_AT_BATS })
+    // 연습 타석은 오답 공을 먼저 보내 보게 한다
+    if (firstPlay && round[0]) round[0] = withAnswerAfterFirst(round[0])
+
     set({
       phase: 'PLAYING',
       // 첫 타석도 문제를 읽고 시작한다
       pitchPhase: 'READING',
       tutorialRound: firstPlay,
       coach: firstPlay ? 'INTRO' : null,
+      coachedTake: false,
+      coachedMistake: false,
       phaseStartedAt: Date.now(),
       level,
-      atBats: buildRound(WORDS, { level, count: MAX_AT_BATS }),
+      atBats: round,
       atBatIndex: 0,
       ballIndex: 0,
       swung: false,
@@ -180,14 +196,19 @@ export const useBaseballStore = create<BaseballStore>((set, get) => ({
 
     const next = NEXT_PHASE[pitchPhase]
 
-    // 연습 타석에서는 공이 판정 지점에 오는 순간 멈춰서 알려 준다
+    // 연습 타석에서는 공이 판정 지점에 오는 순간 멈춰서 알려 준다.
+    // 오답 공은 **첫 번째만** 알려 주고, 나머지는 스스로 보내보게 한다.
     if (next === 'WINDOW' && isPractice(get())) {
-      const atBat = get().atBats[get().atBatIndex]
-      const isAnswer = atBat ? get().ballIndex === atBat.answerIndex : false
+      const { atBats, atBatIndex, ballIndex, coachedTake } = get()
+      const atBat = atBats[atBatIndex]
+      const isAnswer = atBat ? ballIndex === atBat.answerIndex : false
+      const showTake = !isAnswer && !coachedTake
+
       set({
         pitchPhase: next,
         phaseStartedAt: Date.now(),
-        coach: isAnswer ? 'SWING' : 'TAKE',
+        coach: isAnswer ? 'SWING' : showTake ? 'TAKE' : null,
+        ...(showTake ? { coachedTake: true } : {}),
       })
       return
     }
@@ -222,6 +243,11 @@ function resolvePitch(set: SetState, get: GetState, swung: boolean) {
   // 규칙을 배우다 받은 스트라이크로 아웃이 되면 배우려던 의욕이 꺾인다.
   if (isPractice(get())) {
     const atBatOver = endsAtBat(outcome) || lastBall
+    // 알려 준 뒤에도 오답 공을 쳤다면 그 자리에서 바로잡는다.
+    // 미리 막는 것보다 틀린 직후에 짚어 주는 편이 규칙으로 남는다.
+    const correcting =
+      outcome === 'SWING_MISS' && !atBatOver && !get().coachedMistake
+
     set({
       pitchPhase: 'RESULT',
       phaseStartedAt: Date.now(),
@@ -230,7 +256,8 @@ function resolvePitch(set: SetState, get: GetState, swung: boolean) {
       lastOuted: false,
       lastAtBatOver: atBatOver,
       lastGameOver: false,
-      coach: atBatOver ? 'OUTS' : null,
+      coach: atBatOver ? 'OUTS' : correcting ? 'MISTAKE' : null,
+      ...(correcting ? { coachedMistake: true } : {}),
     })
     return
   }
@@ -312,4 +339,6 @@ export const selectAtBat = (s: BaseballStore): Question | undefined =>
 /** 1000점 환산 결과 (§15.7) */
 export const selectMedalScore = (s: BaseballStore): number =>
   toMedalScale(s.score.score, Math.max(1, s.count.atBats))
+
+
 

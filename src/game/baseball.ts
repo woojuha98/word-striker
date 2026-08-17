@@ -79,6 +79,13 @@ export type CoachCue =
   | 'TAKE'
   /** 정답 공이 왔다 — 쳐야 한다 */
   | 'SWING'
+  /**
+   * 알려 준 뒤에도 오답 공을 쳤다 — 그 자리에서 바로잡는다.
+   *
+   * 같은 경고를 공마다 반복하는 대신, 한 번 보여 주고 나머지는 스스로
+   * 보내보게 한다. 틀렸을 때 즉시 교정하는 편이 미리 막는 것보다 남는다.
+   */
+  | 'MISTAKE'
   /** 연습 타석이 끝났다 — 3스트라이크 아웃을 알린다 */
   | 'OUTS'
 
@@ -86,7 +93,24 @@ export type CoachCue =
 export const COACH_HOLD_MS: Record<Exclude<CoachCue, 'SWING'>, number> = {
   INTRO: 2400,
   TAKE: 1800,
+  MISTAKE: 1600,
   OUTS: 2000,
+}
+
+/**
+ * 연습 타석은 정답 공을 첫 번째에 두지 않는다.
+ *
+ * 정답이 첫 공이면 치는 순간 타석이 끝나 "이 공은 치지 마세요"를 한 번도
+ * 보지 못한다. 정작 가르치려던 규칙(오답은 보낸다)을 못 배우고 튜토리얼이
+ * 끝나는 셈이다. 오답을 먼저 보내 본 뒤에 칠 공이 오도록 순서를 보장한다.
+ */
+export function withAnswerAfterFirst<
+  T extends { options: string[]; answerIndex: number },
+>(question: T): T {
+  if (question.answerIndex !== 0) return question
+  const options = [...question.options]
+  ;[options[0], options[1]] = [options[1], options[0]]
+  return { ...question, options, answerIndex: 1 }
 }
 
 /** 한 줄을 넘기지 않는다 (§13.3) */
@@ -94,6 +118,7 @@ export const COACH_LINE: Record<CoachCue, string> = {
   INTRO: '공 4개 중 정답은 하나뿐입니다',
   TAKE: '이 공은 치지 마세요',
   SWING: '이 공을 치세요',
+  MISTAKE: '이건 오답이었어요',
   OUTS: '스트라이크 3개면 아웃입니다',
 }
 
