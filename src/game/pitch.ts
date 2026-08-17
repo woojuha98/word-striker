@@ -13,6 +13,15 @@ import type { QuestionType } from '../types/word'
 
 export type PitchPhase =
   /**
+   * 판 시작 카운트다운 — 3·2·1. **한 판에 딱 한 번**이다.
+   *
+   * 야구는 시작하자마자 공이 날아온다. 축구는 문제를 보고 스스로 탭할 때
+   * 공이 나가지만 여기서는 준비가 되든 말든 투수가 던지므로, 첫 타석만
+   * 손해를 보고 시작하게 된다. 타석마다 넣지 않는 이유는 반대다 —
+   * 2.1초 × 10타석이면 한 판이 20초 넘게 길어진다.
+   */
+  | 'COUNTDOWN'
+  /**
    * 문제 읽기 — 타석이 시작될 때 한 번. 공은 아직 없다.
    *
    * 공에는 선택지만 적히므로, 문제 자체를 읽을 시간은 따로 줘야 한다.
@@ -57,6 +66,13 @@ export const PITCH_TRAVEL_MS = PITCH_CYCLE_MS - PITCH_READY_MS - SWING_WINDOW_MS
 /** 판정 결과를 보여주는 시간 */
 export const PITCH_RESULT_MS = 500
 
+/** 카운트다운 시작 숫자와 한 칸의 길이 */
+export const COUNTDOWN_FROM = 3
+export const COUNTDOWN_STEP_MS = 700
+
+/** 판 시작 카운트다운 전체 길이 — 3·2·1 */
+export const COUNTDOWN_MS = COUNTDOWN_FROM * COUNTDOWN_STEP_MS
+
 /**
  * 문제를 읽는 시간 — 유형별 (§15.2).
  *
@@ -72,6 +88,8 @@ export const READING_MS: Record<QuestionType, number> = {
 /** 각 단계가 유지되는 시간. 읽기 시간만 문제 유형에 따라 다르다. */
 export function phaseDuration(phase: PitchPhase, type: QuestionType): number {
   switch (phase) {
+    case 'COUNTDOWN':
+      return COUNTDOWN_MS
     case 'READING':
       return READING_MS[type]
     case 'READY':
@@ -90,6 +108,8 @@ export function phaseDuration(phase: PitchPhase, type: QuestionType): number {
  * RESULT 다음은 같은 타석의 READY다 — 타석이 끝나면 스토어가 READING으로 보낸다.
  */
 export const NEXT_PHASE: Record<PitchPhase, PitchPhase> = {
+  // 카운트다운은 판 시작에서만 들어오고 다시 돌아오지 않는다
+  COUNTDOWN: 'READING',
   READING: 'READY',
   READY: 'PITCHING',
   PITCHING: 'WINDOW',
@@ -119,6 +139,7 @@ export function acceptsSwing(phase: PitchPhase): boolean {
  */
 export function ballProgress(phase: PitchPhase, elapsedMs: number): number {
   switch (phase) {
+    case 'COUNTDOWN':
     case 'READING':
     case 'READY':
       return 0

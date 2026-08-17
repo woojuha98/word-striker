@@ -135,8 +135,9 @@ export const useBaseballStore = create<BaseballStore>((set, get) => ({
 
     set({
       phase: 'PLAYING',
-      // 첫 타석도 문제를 읽고 시작한다
-      pitchPhase: 'READING',
+      // 3·2·1 뒤에 첫 문제를 읽는다. 카운트다운은 판 시작 한 번뿐이고,
+      // 이후 타석은 READING부터 시작한다 (§15.6)
+      pitchPhase: 'COUNTDOWN',
       tutorialRound: firstPlay,
       coach: firstPlay ? 'INTRO' : null,
       coachedTake: false,

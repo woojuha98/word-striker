@@ -15,6 +15,8 @@ import {
   STRIKES_PER_OUT,
 } from '../game/baseball'
 import {
+  COUNTDOWN_FROM,
+  COUNTDOWN_STEP_MS,
   phaseDuration,
   PITCH_TRAVEL_MS,
   showsBall,
@@ -71,6 +73,20 @@ export function BaseballScreen() {
     const id = setTimeout(advance, phaseDuration(pitchPhase, atBat.type))
     return () => clearTimeout(id)
   }, [pitchPhase, phaseStartedAt, atBat, coach, advance])
+
+  // 3·2·1. 단계 길이는 스토어가 재고 화면은 숫자만 바꾼다 —
+  // 여기서 다음 단계로 넘기지 않는다 (§15.6).
+  // 코칭이 떠 있으면 시간이 멈추므로 카운트도 같이 멈춘다.
+  const [countdown, setCountdown] = useState(COUNTDOWN_FROM)
+  useEffect(() => {
+    if (pitchPhase !== 'COUNTDOWN' || coach) return
+    setCountdown(COUNTDOWN_FROM)
+    const id = setInterval(
+      () => setCountdown((n) => Math.max(1, n - 1)),
+      COUNTDOWN_STEP_MS,
+    )
+    return () => clearInterval(id)
+  }, [pitchPhase, phaseStartedAt, coach])
 
   // 코칭은 정해진 시간 뒤 저절로 닫힌다.
   // "이 공을 치세요"만 예외 — 실제로 칠 때까지 기다린다.
@@ -129,13 +145,20 @@ export function BaseballScreen() {
         </span>
       </div>
 
+      {/*
+        카운트다운 동안에는 문제를 감춘다. 여기서 보여 주면 첫 타석만
+        읽는 시간을 2.1초 더 갖게 되어, 유형별로 정해 둔 읽기 시간(§15.6)이
+        타석마다 달라진다. 자리는 비워 둬야 문제가 뜰 때 화면이 밀리지 않는다.
+      */}
       <div className="relative z-10 flex shrink-0 basis-[15%] items-center justify-center px-4">
-        <AutoFitText
-          sizes={isSentence ? SENTENCE_SIZES : PROMPT_SIZES}
-          className="font-bold"
-        >
-          {atBat.prompt}
-        </AutoFitText>
+        {pitchPhase !== 'COUNTDOWN' && (
+          <AutoFitText
+            sizes={isSentence ? SENTENCE_SIZES : PROMPT_SIZES}
+            className="font-bold"
+          >
+            {atBat.prompt}
+          </AutoFitText>
+        )}
       </div>
 
       {/* 읽기 단계 — 공이 오기 전에 문제를 먼저 본다 (§15.2) */}
@@ -203,6 +226,32 @@ export function BaseballScreen() {
             }
             outed={lastOuted}
           />
+        )}
+
+        {/*
+          판 시작 카운트다운 (§15.6).
+          야구는 첫 공이 곧바로 날아와 준비할 틈이 없다. 판당 한 번만 넣는다.
+          탭은 판정창 밖이라 자동으로 무시된다 (§15.5).
+        */}
+        {pitchPhase === 'COUNTDOWN' && (
+          <div
+            data-countdown={countdown}
+            className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-night/60"
+          >
+            <motion.span
+              key={countdown}
+              className="text-7xl font-extrabold tabular-nums text-combo"
+              style={{ textShadow: '0 2px 12px rgba(0,0,0,0.9)' }}
+              initial={{ scale: 1.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.18 }}
+            >
+              {countdown}
+            </motion.span>
+            <span className="text-xs tracking-widest text-frame/60">
+              곧 첫 공이 들어옵니다
+            </span>
+          </div>
         )}
 
         {/* 튜토리얼 코칭 (§13.3) — 글로 설명하지 않고 그 상황에서 멈춘다 */}
