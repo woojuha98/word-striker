@@ -52,6 +52,31 @@ export function loadAllBestScores(
   }
 }
 
+/**
+ * 야구 튜토리얼 (§13.3 방식).
+ *
+ * 축구와 키를 나눈다. 종목마다 배우는 것이 다르고, 축구를 해봤다고
+ * "안 치는 것도 선택"이라는 야구 규칙을 아는 것은 아니다.
+ */
+const BASEBALL_TUTORIAL_KEY = 'word-striker:baseball-tutorial-seen'
+
+export function loadBaseballTutorialSeen(): boolean {
+  try {
+    return localStorage.getItem(BASEBALL_TUTORIAL_KEY) === '1'
+  } catch {
+    // 저장소를 못 읽으면 매번 보여준다. 규칙을 모른 채 시작하는 쪽이 더 나쁘다.
+    return false
+  }
+}
+
+export function saveBaseballTutorialSeen(): void {
+  try {
+    localStorage.setItem(BASEBALL_TUTORIAL_KEY, '1')
+  } catch {
+    // 무시
+  }
+}
+
 /** 음소거 상태 (§14.5) */
 const MUTED_KEY = 'word-striker:muted'
 

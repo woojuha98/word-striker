@@ -12,10 +12,12 @@ import {
   applyPitch,
   BALLS_PER_AT_BAT,
   createCountState,
+  endsAtBat,
   judgePitch,
   MAX_AT_BATS,
   scoreOutcomeOf,
   toMedalScale,
+  type CoachCue,
   type CountState,
   type PitchOutcome,
 } from '../game/baseball'
@@ -30,7 +32,9 @@ import {
   type ScoreState,
 } from '../game/score'
 import {
+  loadBaseballTutorialSeen,
   loadBestScore,
+  saveBaseballTutorialSeen,
   saveBestScore,
   type SportId,
 } from '../game/storage'
@@ -69,12 +73,27 @@ interface BaseballStore {
   bestScore: number
   isNewBest: boolean
 
+  /** 이 판이 튜토리얼로 시작했는지 — 첫 타석이 연습 타석이 된다 (§13.3) */
+  tutorialRound: boolean
+  /**
+   * 지금 띄운 코칭. 값이 있으면 **단계 진행이 멈춘다** —
+   * 실제 상황에서 멈춰 보여주는 것이 글로 설명하는 것보다 잘 남는다.
+   */
+  coach: CoachCue | null
+
   start: (level: WordLevel) => void
   /** 판정창 안에서만 받는다 (§15.5) */
   swing: () => void
   /** 현재 단계의 시간이 다 되었을 때 화면이 부른다 */
   advance: () => void
+  /** 코칭을 닫고 멈춰 있던 단계를 다시 흐르게 한다 */
+  clearCoach: () => void
   exit: () => void
+}
+
+/** 연습 타석인가 — 스트라이크·아웃·점수를 집계하지 않는다 */
+function isPractice(s: BaseballStore): boolean {
+  return s.tutorialRound && s.atBatIndex === 0
 }
 
 export const useBaseballStore = create<BaseballStore>((set, get) => ({
@@ -95,12 +114,17 @@ export const useBaseballStore = create<BaseballStore>((set, get) => ({
   score: createScoreState(),
   bestScore: 0,
   isNewBest: false,
+  tutorialRound: false,
+  coach: null,
 
   start: (level) => {
+    const firstPlay = !loadBaseballTutorialSeen()
     set({
       phase: 'PLAYING',
       // 첫 타석도 문제를 읽고 시작한다
       pitchPhase: 'READING',
+      tutorialRound: firstPlay,
+      coach: firstPlay ? 'INTRO' : null,
       phaseStartedAt: Date.now(),
       level,
       atBats: buildRound(WORDS, { level, count: MAX_AT_BATS }),
@@ -120,16 +144,28 @@ export const useBaseballStore = create<BaseballStore>((set, get) => ({
   },
 
   swing: () => {
-    const { pitchPhase, swung } = get()
+    const state = get()
+
+    // "이 공을 치세요"에서 멈춰 있다면, 그 탭이 곧 정답 스윙이다
+    if (state.coach === 'SWING') {
+      set({ coach: null, swung: true })
+      resolvePitch(set, get, true)
+      return
+    }
+    // 다른 코칭 중에는 탭을 받지 않는다 — 치지 말라고 해놓고 받으면 안 된다
+    if (state.coach) return
+
     // 판정창 밖의 탭은 헛스윙이 아니라 무시다 (§15.5)
-    if (!acceptsSwing(pitchPhase) || swung) return
+    if (!acceptsSwing(state.pitchPhase) || state.swung) return
     set({ swung: true })
     resolvePitch(set, get, true)
   },
 
   advance: () => {
-    const { phase, pitchPhase } = get()
+    const { phase, pitchPhase, coach } = get()
     if (phase !== 'PLAYING') return
+    // 코칭이 떠 있는 동안은 시간이 흐르지 않는다
+    if (coach) return
 
     if (pitchPhase === 'WINDOW') {
       // 판정창이 닫히는 시점에 "거름"이 확정된다 (§15.6)
@@ -142,7 +178,26 @@ export const useBaseballStore = create<BaseballStore>((set, get) => ({
       return
     }
 
-    set({ pitchPhase: NEXT_PHASE[pitchPhase], phaseStartedAt: Date.now() })
+    const next = NEXT_PHASE[pitchPhase]
+
+    // 연습 타석에서는 공이 판정 지점에 오는 순간 멈춰서 알려 준다
+    if (next === 'WINDOW' && isPractice(get())) {
+      const atBat = get().atBats[get().atBatIndex]
+      const isAnswer = atBat ? get().ballIndex === atBat.answerIndex : false
+      set({
+        pitchPhase: next,
+        phaseStartedAt: Date.now(),
+        coach: isAnswer ? 'SWING' : 'TAKE',
+      })
+      return
+    }
+
+    set({ pitchPhase: next, phaseStartedAt: Date.now() })
+  },
+
+  clearCoach: () => {
+    // 멈춰 있던 단계를 지금부터 다시 센다
+    set({ coach: null, phaseStartedAt: Date.now() })
   },
 
   exit: () => {
@@ -161,6 +216,24 @@ function resolvePitch(set: SetState, get: GetState, swung: boolean) {
 
   const isAnswer = ballIndex === atBat.answerIndex
   const outcome = judgePitch(swung, isAnswer)
+  const lastBall = ballIndex >= BALLS_PER_AT_BAT - 1
+
+  // 연습 타석은 판정만 보여 주고 아무것도 집계하지 않는다 (§13.3).
+  // 규칙을 배우다 받은 스트라이크로 아웃이 되면 배우려던 의욕이 꺾인다.
+  if (isPractice(get())) {
+    const atBatOver = endsAtBat(outcome) || lastBall
+    set({
+      pitchPhase: 'RESULT',
+      phaseStartedAt: Date.now(),
+      lastOutcome: outcome,
+      lastAnswer: null,
+      lastOuted: false,
+      lastAtBatOver: atBatOver,
+      lastGameOver: false,
+      coach: atBatOver ? 'OUTS' : null,
+    })
+    return
+  }
 
   // 점수는 §5 산식 그대로. 오답을 거른 경우(null)는 계산 자체를 하지 않아
   // 감점도 콤보 하락도 없다 (§15.4).
@@ -171,11 +244,7 @@ function resolvePitch(set: SetState, get: GetState, swung: boolean) {
 
   // 카운트 판정은 여기서 한 번만 하고, 결과 플래그를 그대로 들고 간다.
   // 다음 단계에서 다시 추론하면 두 곳의 규칙이 어긋난다.
-  const counted = applyPitch(
-    count,
-    outcome,
-    ballIndex >= BALLS_PER_AT_BAT - 1,
-  )
+  const counted = applyPitch(count, outcome, lastBall)
 
   set({
     pitchPhase: 'RESULT',
@@ -216,6 +285,9 @@ function nextBall(set: SetState, get: GetState) {
     })
     return
   }
+
+  // 연습 타석을 마쳤으면 튜토리얼은 끝이다. 중간에 나가면 다시 보여 준다.
+  if (lastAtBatOver && isPractice(get())) saveBaseballTutorialSeen()
 
   set({
     // 새 타석이면 문제를 읽는 시간부터, 같은 타석이면 바로 다음 공

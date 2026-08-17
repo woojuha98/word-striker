@@ -7,6 +7,8 @@ import { Hud } from '../components/Hud'
 import { PROMPT_SIZES, SENTENCE_SIZES } from '../components/textSizes'
 import {
   BALLS_PER_AT_BAT,
+  COACH_HOLD_MS,
+  COACH_LINE,
   MAX_AT_BATS,
   OUTS_PER_GAME,
   STRIKES_PER_OUT,
@@ -48,8 +50,11 @@ export function BaseballScreen() {
   const score = useBaseballStore((s) => s.score)
   const lastOutcome = useBaseballStore((s) => s.lastOutcome)
   const lastOuted = useBaseballStore((s) => s.lastOuted)
+  const coach = useBaseballStore((s) => s.coach)
+  const tutorialRound = useBaseballStore((s) => s.tutorialRound)
   const swing = useBaseballStore((s) => s.swing)
   const advance = useBaseballStore((s) => s.advance)
+  const clearCoach = useBaseballStore((s) => s.clearCoach)
 
   const fieldRef = useRef<HTMLButtonElement>(null)
   const [fieldHeight, setFieldHeight] = useState(0)
@@ -65,12 +70,20 @@ export function BaseballScreen() {
   }, [])
 
   // 단계마다 정해진 시간이 지나면 다음 단계로 (§15.6).
-  // 읽기 시간만 문제 유형에 따라 다르다.
+  // 읽기 시간만 문제 유형에 따라 다르고, 코칭 중에는 시간이 멈춘다.
   useEffect(() => {
-    if (!atBat) return
+    if (!atBat || coach) return
     const id = setTimeout(advance, phaseDuration(pitchPhase, atBat.type))
     return () => clearTimeout(id)
-  }, [pitchPhase, phaseStartedAt, atBat, advance])
+  }, [pitchPhase, phaseStartedAt, atBat, coach, advance])
+
+  // 코칭은 정해진 시간 뒤 저절로 닫힌다.
+  // "이 공을 치세요"만 예외 — 실제로 칠 때까지 기다린다.
+  useEffect(() => {
+    if (!coach || coach === 'SWING') return
+    const id = setTimeout(clearCoach, COACH_HOLD_MS[coach])
+    return () => clearTimeout(id)
+  }, [coach, clearCoach])
 
   // 휘슬은 타석마다 한 번. 공마다 울리면 한 판에 40번이라 금방 피로해진다.
   useEffect(() => {
@@ -102,8 +115,14 @@ export function BaseballScreen() {
 
       {/* 카운트 — 야구는 남은 문제 수가 아니라 S/O로 진행을 읽는다 */}
       <div className="relative z-10 flex shrink-0 basis-[5%] items-center gap-4 px-4 text-xs">
-        <Dots label="S" filled={count.strikes} total={STRIKES_PER_OUT} tone="bg-combo" />
-        <Dots label="O" filled={count.outs} total={OUTS_PER_GAME} tone="bg-wrong" />
+        {tutorialRound && atBatIndex === 0 ? (
+          <span className="font-bold text-combo">연습 타석</span>
+        ) : (
+          <>
+            <Dots label="S" filled={count.strikes} total={STRIKES_PER_OUT} tone="bg-combo" />
+            <Dots label="O" filled={count.outs} total={OUTS_PER_GAME} tone="bg-wrong" />
+          </>
+        )}
         <span className="ml-auto text-frame/40">
           공 {ballIndex + 1} / {BALLS_PER_AT_BAT}
         </span>
@@ -192,6 +211,35 @@ export function BaseballScreen() {
             </span>
             {lastOuted && (
               <span className="text-lg font-bold text-wrong">아웃</span>
+            )}
+          </motion.div>
+        )}
+
+        {/* 튜토리얼 코칭 (§13.3) — 글로 설명하지 않고 그 상황에서 멈춘다 */}
+        {coach && (
+          <motion.div
+            data-coach={coach}
+            key={coach}
+            className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-night/70 px-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.12 }}
+          >
+            <span
+              className={`text-center text-xl font-extrabold ${
+                coach === 'SWING' ? 'text-combo' : 'text-frame'
+              }`}
+              style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}
+            >
+              {COACH_LINE[coach]}
+            </span>
+            {coach === 'SWING' && (
+              <span className="text-xs text-frame/60">화면을 탭하세요</span>
+            )}
+            {coach === 'INTRO' && (
+              <span className="text-xs text-frame/60">
+                연습 타석 — 점수에 반영되지 않습니다
+              </span>
             )}
           </motion.div>
         )}
