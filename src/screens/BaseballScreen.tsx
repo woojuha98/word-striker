@@ -4,6 +4,7 @@ import { AutoFitText } from '../components/AutoFitText'
 import { BaseballField } from '../components/BaseballField'
 import { Batter } from '../components/Batter'
 import { Hud } from '../components/Hud'
+import { PitchFeedback } from '../components/PitchFeedback'
 import { PROMPT_SIZES, SENTENCE_SIZES } from '../components/textSizes'
 import {
   BALLS_PER_AT_BAT,
@@ -12,7 +13,6 @@ import {
   MAX_AT_BATS,
   OUTS_PER_GAME,
   STRIKES_PER_OUT,
-  type PitchOutcome,
 } from '../game/baseball'
 import {
   phaseDuration,
@@ -20,18 +20,12 @@ import {
   showsBall,
   SWING_WINDOW_MS,
 } from '../game/pitch'
-import { playSound } from '../game/sound'
+import { multiplierOf } from '../game/score'
+import { playComboUp, playSound } from '../game/sound'
 import { selectAtBat, useBaseballStore } from '../store/baseballStore'
 
 /** 판정창이 열리는 지점 — game/pitch.ts의 WINDOW_ENTRY와 같아야 한다 */
 const WINDOW_ENTRY = 0.62
-
-const OUTCOME_LABEL: Record<PitchOutcome, string> = {
-  HIT: '안타!',
-  SWING_MISS: '헛스윙',
-  TAKEN_STRIKE: '스트라이크',
-  BALL: '볼',
-}
 
 /**
  * 야구 화면 (§15)
@@ -49,6 +43,7 @@ export function BaseballScreen() {
   const count = useBaseballStore((s) => s.count)
   const score = useBaseballStore((s) => s.score)
   const lastOutcome = useBaseballStore((s) => s.lastOutcome)
+  const lastAnswer = useBaseballStore((s) => s.lastAnswer)
   const lastOuted = useBaseballStore((s) => s.lastOuted)
   const coach = useBaseballStore((s) => s.coach)
   const tutorialRound = useBaseballStore((s) => s.tutorialRound)
@@ -90,13 +85,19 @@ export function BaseballScreen() {
     if (pitchPhase === 'READING') playSound('question')
   }, [pitchPhase, phaseStartedAt])
 
-  // 판정 결과 소리
+  // 판정 결과 소리. 오답을 거른 공(BALL)은 조용히 넘어간다 —
+  // 타석당 세 번까지 나오는 판정이라 소리까지 붙이면 소음이 된다.
   useEffect(() => {
     if (pitchPhase !== 'RESULT' || !lastOutcome) return
     if (lastOutcome === 'HIT') playSound('goal')
     else if (lastOutcome === 'SWING_MISS') playSound('wrong')
     else if (lastOutcome === 'TAKEN_STRIKE') playSound('timeout')
-  }, [pitchPhase, lastOutcome, phaseStartedAt])
+
+    // 콤보 변화는 축구와 같은 규칙으로 들려준다 (§14.4)
+    if (!lastAnswer) return
+    if (lastAnswer.tierAfter > lastAnswer.tierBefore) playComboUp(lastAnswer.tierAfter)
+    else if (lastAnswer.tierAfter < lastAnswer.tierBefore) playSound('comboDown')
+  }, [pitchPhase, lastOutcome, lastAnswer, phaseStartedAt])
 
   if (!atBat) return null
 
@@ -188,31 +189,20 @@ export function BaseballScreen() {
           </motion.div>
         )}
 
-        {/* 판정 결과 */}
+        {/* 판정 결과 + 획득 점수 (§14.7) */}
         {pitchPhase === 'RESULT' && lastOutcome && (
-          <motion.div
+          <PitchFeedback
             key={`${atBatIndex}-${ballIndex}`}
-            className="absolute inset-x-0 top-[38%] flex flex-col items-center gap-1"
-            initial={{ opacity: 0, scale: 0.85 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.12 }}
-          >
-            <span
-              className={`text-3xl font-extrabold tracking-wide ${
-                lastOutcome === 'HIT'
-                  ? 'text-combo'
-                  : lastOutcome === 'BALL'
-                    ? 'text-frame/70'
-                    : 'text-wrong'
-              }`}
-              style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}
-            >
-              {OUTCOME_LABEL[lastOutcome]}
-            </span>
-            {lastOuted && (
-              <span className="text-lg font-bold text-wrong">아웃</span>
-            )}
-          </motion.div>
+            outcome={lastOutcome}
+            // 연습 타석은 집계하지 않으므로 점수도 띄우지 않는다 (§13.3)
+            delta={lastAnswer ? lastAnswer.delta : null}
+            comboMultiplier={
+              lastAnswer && lastAnswer.tierAfter > lastAnswer.tierBefore
+                ? multiplierOf(lastAnswer.tierAfter)
+                : null
+            }
+            outed={lastOuted}
+          />
         )}
 
         {/* 튜토리얼 코칭 (§13.3) — 글로 설명하지 않고 그 상황에서 멈춘다 */}
