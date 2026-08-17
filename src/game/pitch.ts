@@ -6,10 +6,20 @@
  * 어떤 순간에도 "지금 무슨 단계인가"가 상태로 명시되어야 하고,
  * 판정창이 닫히는 시점은 타이머로 확정한다.
  *
- *   대기 → 투구 → 판정창 → 결과 → (다음 공 | 타석 종료)
+ *   문제 읽기 → 대기 → 투구 → 판정창 → 결과 → (다음 공 | 다음 타석)
  */
 
+import type { QuestionType } from '../types/word'
+
 export type PitchPhase =
+  /**
+   * 문제 읽기 — 타석이 시작될 때 한 번. 공은 아직 없다.
+   *
+   * 공에는 선택지만 적히므로, 문제 자체를 읽을 시간은 따로 줘야 한다.
+   * 특히 CLOZE는 문장을 읽고 나서 선택지를 보는 **2단계 과제**라,
+   * 투구와 동시에 제시하면 공이 보이는 950ms 안에 처리할 수 없다.
+   */
+  | 'READING'
   /** 대기 — 다음 공을 준비한다. 탭은 무시 */
   | 'READY'
   /** 투구 — 공이 날아오는 중. 아직 판정창이 아니므로 탭은 무시 */
@@ -47,20 +57,49 @@ export const PITCH_TRAVEL_MS = PITCH_CYCLE_MS - PITCH_READY_MS - SWING_WINDOW_MS
 /** 판정 결과를 보여주는 시간 */
 export const PITCH_RESULT_MS = 500
 
-/** 각 단계가 유지되는 시간. RESULT는 타석 종료 여부에 따라 화면이 정한다. */
-export const PHASE_DURATION_MS: Record<PitchPhase, number> = {
-  READY: PITCH_READY_MS,
-  PITCHING: PITCH_TRAVEL_MS,
-  WINDOW: SWING_WINDOW_MS,
-  RESULT: PITCH_RESULT_MS,
+/**
+ * 문제를 읽는 시간 — 유형별 (§15.2).
+ *
+ * 단어 하나는 한눈에 들어오지만 예문은 읽어야 한다. CLOZE에 같은 시간을
+ * 주면 문장을 다 읽기도 전에 공이 온다.
+ */
+export const READING_MS: Record<QuestionType, number> = {
+  EN_KO: 800,
+  KO_EN: 800,
+  CLOZE: 2000,
 }
 
-/** 다음 단계 */
+/** 각 단계가 유지되는 시간. 읽기 시간만 문제 유형에 따라 다르다. */
+export function phaseDuration(phase: PitchPhase, type: QuestionType): number {
+  switch (phase) {
+    case 'READING':
+      return READING_MS[type]
+    case 'READY':
+      return PITCH_READY_MS
+    case 'PITCHING':
+      return PITCH_TRAVEL_MS
+    case 'WINDOW':
+      return SWING_WINDOW_MS
+    case 'RESULT':
+      return PITCH_RESULT_MS
+  }
+}
+
+/**
+ * 다음 단계.
+ * RESULT 다음은 같은 타석의 READY다 — 타석이 끝나면 스토어가 READING으로 보낸다.
+ */
 export const NEXT_PHASE: Record<PitchPhase, PitchPhase> = {
+  READING: 'READY',
   READY: 'PITCHING',
   PITCHING: 'WINDOW',
   WINDOW: 'RESULT',
   RESULT: 'READY',
+}
+
+/** 공이 화면에 있는 단계인가 */
+export function showsBall(phase: PitchPhase): boolean {
+  return phase === 'PITCHING' || phase === 'WINDOW' || phase === 'RESULT'
 }
 
 /**
@@ -80,6 +119,7 @@ export function acceptsSwing(phase: PitchPhase): boolean {
  */
 export function ballProgress(phase: PitchPhase, elapsedMs: number): number {
   switch (phase) {
+    case 'READING':
     case 'READY':
       return 0
     case 'PITCHING':

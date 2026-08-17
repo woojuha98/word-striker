@@ -13,8 +13,9 @@ import {
   type PitchOutcome,
 } from '../game/baseball'
 import {
-  PHASE_DURATION_MS,
+  phaseDuration,
   PITCH_TRAVEL_MS,
+  showsBall,
   SWING_WINDOW_MS,
 } from '../game/pitch'
 import { playSound } from '../game/sound'
@@ -63,15 +64,17 @@ export function BaseballScreen() {
     return () => observer.disconnect()
   }, [])
 
-  // 단계마다 정해진 시간이 지나면 다음 단계로 (§15.6)
+  // 단계마다 정해진 시간이 지나면 다음 단계로 (§15.6).
+  // 읽기 시간만 문제 유형에 따라 다르다.
   useEffect(() => {
-    const id = setTimeout(advance, PHASE_DURATION_MS[pitchPhase])
+    if (!atBat) return
+    const id = setTimeout(advance, phaseDuration(pitchPhase, atBat.type))
     return () => clearTimeout(id)
-  }, [pitchPhase, phaseStartedAt, advance])
+  }, [pitchPhase, phaseStartedAt, atBat, advance])
 
-  // 공이 날아오기 시작할 때 소리
+  // 휘슬은 타석마다 한 번. 공마다 울리면 한 판에 40번이라 금방 피로해진다.
   useEffect(() => {
-    if (pitchPhase === 'PITCHING') playSound('question')
+    if (pitchPhase === 'READING') playSound('question')
   }, [pitchPhase, phaseStartedAt])
 
   // 판정 결과 소리
@@ -115,6 +118,24 @@ export function BaseballScreen() {
         </AutoFitText>
       </div>
 
+      {/* 읽기 단계 — 공이 오기 전에 문제를 먼저 본다 (§15.2) */}
+      {pitchPhase === 'READING' && (
+        <motion.div
+          key={`reading-${atBatIndex}`}
+          className="pointer-events-none absolute inset-x-0 top-[32%] z-20 flex flex-col items-center gap-1"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.15 }}
+        >
+          <span className="text-xs tracking-widest text-combo">
+            {atBatIndex + 1}번 타자
+          </span>
+          <span className="text-[11px] text-frame/50">
+            {isSentence ? '문장을 읽고 빈칸에 들어갈 말을 고르세요' : '뜻을 고르세요'}
+          </span>
+        </motion.div>
+      )}
+
       {/* 필드 — 여기를 탭하면 스윙 */}
       <button
         type="button"
@@ -131,7 +152,7 @@ export function BaseballScreen() {
         </div>
 
         {/* 날아오는 공. 위치는 단계가 정한다 — 위치로 단계를 되짚지 않는다 */}
-        {pitchPhase !== 'READY' && fieldHeight > 0 && (
+        {showsBall(pitchPhase) && fieldHeight > 0 && (
           <motion.div
             data-pitch-ball
             className="absolute left-1/2 top-0 -translate-x-1/2"

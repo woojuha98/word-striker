@@ -99,7 +99,8 @@ export const useBaseballStore = create<BaseballStore>((set, get) => ({
   start: (level) => {
     set({
       phase: 'PLAYING',
-      pitchPhase: 'READY',
+      // 첫 타석도 문제를 읽고 시작한다
+      pitchPhase: 'READING',
       phaseStartedAt: Date.now(),
       level,
       atBats: buildRound(WORDS, { level, count: MAX_AT_BATS }),
@@ -217,7 +218,8 @@ function nextBall(set: SetState, get: GetState) {
   }
 
   set({
-    pitchPhase: 'READY',
+    // 새 타석이면 문제를 읽는 시간부터, 같은 타석이면 바로 다음 공
+    pitchPhase: lastAtBatOver ? 'READING' : 'READY',
     phaseStartedAt: Date.now(),
     swung: false,
     lastOutcome: null,
